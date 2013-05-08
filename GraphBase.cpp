@@ -21,7 +21,7 @@ GraphBase::~GraphBase() {
 void GraphBase::Generate(){
 }
 
-void GraphBase::Load(const std::string fname){
+void GraphBase::LoadByRow(const std::string fname){
 }
 
 void GraphBase::Save(const std::string fname){

@@ -1,5 +1,5 @@
 #CC=/Users/xiaocai/software/mpich-3.0.2/bin/mpic++
-CC=mpic++ -g
+CC=/Users/xiaocai/software/mpich-3.0.2/bin/mpic++ -g
 #CC=CC
 CFLAGS=-DDEBUG
 #CFLAGS=-std=c++11

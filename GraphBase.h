@@ -15,12 +15,12 @@ class GraphBase {
     float *vertPotentials;
     float *edgePotentials;
   public:
-    GraphBase():vertPotentials(NULL), edgePotentials(NULL){}
+    GraphBase():vertPotentials(NULL), edgePotentials(NULL), numVertPotentials(0), numEdgePotentials(0){}
     GraphBase(int verticePotentialSize, int edgePotentialSize);
     virtual ~GraphBase();
     virtual void Generate();
     virtual void Save(const std::string fname);
-    virtual void Load(const std::string fname);
+    virtual void LoadByRow(const std::string fname);
 };
 
 #endif /* GRAPHBASE_H_ */

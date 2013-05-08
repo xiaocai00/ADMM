@@ -18,79 +18,118 @@
 #include "BBox.h"
 #include "Tree.h"
 
-enum Partitioner{ROW, COL, BLOCK};
+enum Partitioner{ROW, COL, BLOCK, EDGE};
 
 class Grid: public GraphBase {
-private:
-	// Global Graph
-	int numLocalRows;
-	int numLocalCols;
-	int numGlobalRows;
-	int numGlobalCols;
+  private:
+    // Global Graph
+    int numLocalRows;
+    int numLocalCols;
+    int numGlobalRows;
+    int numGlobalCols;
+    APGMem *aux;
+    EdgeOp *edgeOp;
+    // Partitioner type
+    BBox bbox;
+    float rhoEdge;
+    Partitioner part;
 
-	// Partitioner type
-	BBox bbox;
-	float rhoEdge;
-	Partitioner part;
-
-	// Local Graph
-	int numGlobalVertices;
-	int numGlobalEdges;
-	int numLocalVerts;
-	int numLocalEdges;
-	int numLocalEdgesGhost;
-	// input data structure
-	int *edgeList;
-	// inferred data structure
-	std::map<int, std::set<int> > outNeighborMap;
-	std::map<int, std::set<int> > inNeighborMap;
-	std::map<int, std::set<int> > internalNeighborMap;
-	std::map<int, int> vSelfMapG2L;
-	std::vector<int> vSelfVec;
-
-	// MPI Info
-	int rank;
-	int nprocs;
+    // Local Graph
+    int numGlobalVerts;
+    int numGlobalEdges;
+    int numLocalVerts;
+    int numLocalEdges;
+    int numLocalEdgesGhost;
+    // input data structure
+    int *edgeList;
+    // inferred data structure
+    std::map<int, std::set<int> > outNeighborMap;
+    std::vector<std::vector<int> > outNeighborMapEdge;
+    std::vector<std::vector<int> > cntNeighborMapEdge;
+    std::map<int, std::set<int> > inNeighborMap;
+    std::map<int, std::set<int> > internalNeighborMap;
+    std::map<int, int> vSelfMapG2L;
+    std::vector<int> vSelfVec;
+    std::vector<float*> vertexMuArr;
+    std::vector<int> neighbors;
+    // MPI Info
+    int rank;
+    int numProcs;
+    int vertexStart;
+    int vertexEnd;
+    float penalty;
+    float penaltyPrime;
 #if DEBUG
-        std::ofstream logFile;
+    std::ofstream logFile;
 #endif
-	std::vector<Edge *>edgeVal;
-	MPI_Request *request;
-        float** commBuffer;
-	void InitNeighborsByRow();
-	int GetProcForGVertByRow(int gvid);
-	void AddToNeighborMap(int vid, std::map<int, std::set<int> > &neighorMap);
-        void DisplaySelf();
-        void VerifyNeighbors(); 
-        void InitTree();
-        void InitCommunication();
-        void FinalizeCommunication();
-	void InitNeighbors();
-	void DisplayNeighbors();
-public:
-	Grid();
-	Grid(int globalRowSize, int globalColSize, int verticePotentialSize,
-			int edgePotentialSize);
-	Grid(int localRowSize, int localColSize, int glocalRowSize, int globalColSize,
-			int verticePotentialSize, int edgePotentialSize);
-	void SetGlobalInfo(int globalRowSize, int globalColSize, 
-                int verticePotentialSize, int edgePotentialSize);
-        void SetGlobalInfo(const std::string fname);
-        void SetPartitioner(Partitioner aPart) {part = aPart;}
-        void setRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }
-	void Partition();
-	void Generate();
-	void Save(const std::string fname);
-	void Load(const std::string fname);
-	void Compute();
-	void Communicate();
-        void InitOptimization();
-        void FinalizeOptimization();
-        int GetRank() {return rank;}
-        int GetNprocs() {return nprocs;}
-	~Grid();
-private:
-	friend std::ostream& operator<<(std::ostream& strm, const Grid &g);
+    std::vector<Edge *> edgeVal;
+    MPI_Request *request;
+    float** commBuffer;
+
+    int GetProcForGVertByRow(int gvid);
+    void ResetVertexMuArr();
+    
+    void InitTree();
+    void VerifyNeighbors();
+    void AddToNeighborMap(int vid, std::map<int, std::set<int> > &neighorMap);
+    void InitNeighborsByRow();
+    void CommunicateByRow();
+    void CommunicateByEdge();
+    void InitCommunication();
+    void FinalizeCommunication();
+
+    void InitNeighbors();
+    void InitNeighborsByEdge();
+    
+    void DisplaySelf();
+    void DisplayNeighbors();
+    void DisplayNeighborsByEdge();
+    
+    std::vector<int> vertArr;
+    std::vector<int> vertCnt;
+  public:
+    void SetPenalties(float p, float pp) {penalty = p; penaltyPrime = pp;}
+    Grid();
+    Grid(int globalRowSize, int globalColSize, int verticePotentialSize,
+        int edgePotentialSize);
+    Grid(int localRowSize, int localColSize, int glocalRowSize, int globalColSize,
+        int verticePotentialSize, int edgePotentialSize);
+    
+    void SetGlobalInfo(int globalRowSize, int globalColSize, 
+        int verticePotentialSize, int edgePotentialSize);
+    void SetGlobalInfo(const std::string fname);
+    
+    void SetPartitioner(Partitioner aPart) {part = aPart;}
+    void setRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }
+    
+    std::vector<std::pair<int,int> > GetVerts();
+    
+    void Generate();
+    void Compute();
+    void Communicate();
+    void Update();
+    void Save(const std::string fname);
+    
+    void InitOptimization();
+    void FinalizeOptimization();
+    
+    
+    void Load(std::string fname);
+    void LoadByRow(const std::string fname);
+    void LoadExample();
+    
+    void DisplayEdge();
+    int GetRank() {
+      return rank;
+    }
+    int GetNprocs() {
+      return numProcs;
+    }
+    ~Grid();
+  private:
+    void PartitionByEdge(std::string fname);
+    void PartitionByRow();
+    friend std::ostream& operator<<(std::ostream& strm, const Grid &g);
 };
 
 #endif /* GRAPHGENERATOR_H_ */

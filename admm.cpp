@@ -29,14 +29,17 @@ int main(int argc, char* argv[])
   double startRun = MPI_Wtime();
   string fname("climate.nc");
   Grid grid;
-  grid.SetPartitioner(ROW);
 
 #ifdef GENERATE
-  grid.SetGlobalInfo(10000, 1000, 3, 9);
+
+  grid.SetPartitioner(ROW);
+  grid.SetGlobalInfo(4, 3, 3, 9);
   grid.Partition();
   grid.Generate();
   grid.Save(fname);
+
 #else
+  grid.SetPartitioner(EDGE);
   //grid.SetGlobalInfo(10000, 1000, 3, 9);
   int irun = 0, totalRuns = 0;
   
@@ -56,19 +59,19 @@ int main(int argc, char* argv[])
   double compTime = 0;
   double minCompTime = 0;
   double maxCompTime = 0;
- 
+   
   PROFILE(startTime);
-  grid.SetGlobalInfo(fname);
+  //grid.SetGlobalInfo(fname);
 
-  grid.Partition();
+  grid.LoadExample();
   PROFILE(allocTime);
+  //grid.Partition();
 
-  grid.Load(fname);
+  //grid.Load(fname);
   PROFILE(loadTime);
 
   grid.InitOptimization();
-  PROFILE(neighborTime);
- 
+  totalRuns = 1; 
   // Optimization
   while(irun++ < totalRuns) {
     iterTime = MPI_Wtime();
@@ -76,13 +79,18 @@ int main(int argc, char* argv[])
     compTime += MPI_Wtime() - iterTime;
     iterTime = MPI_Wtime();
     grid.Communicate();
+    grid.Update();
     MPI_Barrier(MPI_COMM_WORLD);
     commTime += MPI_Wtime() - iterTime;
+    //grid.DisplayEdge();
   }
- 
+  
   grid.FinalizeOptimization();
+  PROFILE(neighborTime);
+ 
   PROFILE(optTime);
   MPI_Barrier(MPI_COMM_WORLD);
+  
   double runTime = MPI_Wtime() - startRun;
 
   MPI_GETMAX(commTime, maxCommTime);
