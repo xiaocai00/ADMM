@@ -85,6 +85,8 @@ class Grid: public GraphBase {
     void DisplayNeighbors();
     void DisplayNeighborsByEdge();
     
+    void UpdateMuArrBeforeComm();
+    void UpdateMuArrAfterComm();
     std::vector<int> vertArr;
     std::vector<int> vertCnt;
   public:
@@ -104,6 +106,7 @@ class Grid: public GraphBase {
     
     std::vector<std::pair<int,int> > GetVerts();
     
+    void Partition();
     void Generate();
     void Compute();
     void Communicate();
@@ -127,6 +130,7 @@ class Grid: public GraphBase {
     }
     ~Grid();
   private:
+    void DisplayMuArr();
     void PartitionByEdge(std::string fname);
     void PartitionByRow();
     friend std::ostream& operator<<(std::ostream& strm, const Grid &g);

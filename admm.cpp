@@ -29,15 +29,14 @@ int main(int argc, char* argv[])
   double startRun = MPI_Wtime();
   string fname("climate.nc");
   Grid grid;
-
 #ifdef GENERATE
-
+  if (grid.GetRank() == 0)
+    cout << "generate grid\n";
   grid.SetPartitioner(ROW);
   grid.SetGlobalInfo(4, 3, 3, 9);
   grid.Partition();
   grid.Generate();
   grid.Save(fname);
-
 #else
   grid.SetPartitioner(EDGE);
   //grid.SetGlobalInfo(10000, 1000, 3, 9);
@@ -61,13 +60,13 @@ int main(int argc, char* argv[])
   double maxCompTime = 0;
    
   PROFILE(startTime);
-  //grid.SetGlobalInfo(fname);
+  
+  grid.SetGlobalInfo(fname);
 
-  grid.LoadExample();
   PROFILE(allocTime);
-  //grid.Partition();
 
-  //grid.Load(fname);
+  //grid.LoadExample();
+  grid.Load(fname);
   PROFILE(loadTime);
 
   grid.InitOptimization();
@@ -76,13 +75,15 @@ int main(int argc, char* argv[])
   while(irun++ < totalRuns) {
     iterTime = MPI_Wtime();
     grid.Compute();
+#if 1
     compTime += MPI_Wtime() - iterTime;
     iterTime = MPI_Wtime();
     grid.Communicate();
     grid.Update();
     MPI_Barrier(MPI_COMM_WORLD);
     commTime += MPI_Wtime() - iterTime;
-    //grid.DisplayEdge();
+    grid.DisplayEdge();
+#endif
   }
   
   grid.FinalizeOptimization();

@@ -136,7 +136,7 @@ void Edge::optimizeEdge(EdgeOp *edgeOp, APGMem *aux, std::vector<float*>& vertex
 #if 0
   std::cout << std::endl;
 #endif
-#if 1
+
   // derivatives
   int start;
   for (int i = 0; i < k; i++) {
@@ -166,6 +166,7 @@ void Edge::optimizeEdge(EdgeOp *edgeOp, APGMem *aux, std::vector<float*>& vertex
 #if 0
   std::cout << std::endl;
 #endif
+#if 1
   for (int i = 0; i < ksquare; i++) {
     value = edgeOp->x_edge[i] + penaltyPrime * aux->edgeDerivative[i];
     value /= penaltyPrime;
@@ -174,6 +175,7 @@ void Edge::optimizeEdge(EdgeOp *edgeOp, APGMem *aux, std::vector<float*>& vertex
     printf("%.2f ", aux->edgePotential[i]);
 #endif
   }
+
 #if 0
   std::cout << std::endl;
   std::cout << std::endl;
