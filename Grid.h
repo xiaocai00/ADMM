@@ -102,8 +102,9 @@ class Grid: public GraphBase {
     void SetGlobalInfo(const std::string fname);
     
     void SetPartitioner(Partitioner aPart) {part = aPart;}
-    void setRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }
-    
+    void SetRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }
+    void Convert(const std::string fname);
+
     std::vector<std::pair<int,int> > GetVerts();
     
     void Partition();
