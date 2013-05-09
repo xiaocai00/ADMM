@@ -6,9 +6,9 @@
  */
 
 #include <iostream>
-#include "Grid.h"
 #include "mpi.h"
-#include "definition.h"
+#include "Grid.h"
+#include "Definition.h"
 
 using namespace std;
 

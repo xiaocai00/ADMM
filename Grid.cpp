@@ -18,6 +18,7 @@
 #include <algorithm>
 #include "mpi.h"
 #include "Grid.h"
+#include <fstream>
 #include "pnetcdf.h"
 #include "definition.h"
 #include <limits>       // std::numeric_limits
@@ -890,6 +891,60 @@ void Grid::InitTree() {
   }
 }
 
+/**
+ * convert a binary file to netcdf file
+ */
+void Grid::Convert(const std::string fname)
+{
+  std::string line;
+  std::string infoFile;
+  std::string edgelistFile;
+  std::string nodePoFile;
+  std::string edgePoFile;
+
+  std::ifstream inFile(fname);
+  if (inFile.is_open()) {
+    while (inFile.good()) {
+      getline(inFile, infoFile);
+      getline(inFile, edgelistFile);
+      getline(inFile, nodePoFile);
+      getline(inFile, edgePoFile);
+    }
+  }
+  inFile.close();
+
+  inFile.open(infoFile.c_str(), std::ios::in | std::ios::binary);
+  inFile >> numLocalVerts;
+  inFile >> numLocalEdges;
+  inFile >> numVertPotentials;
+  inFile.close();
+
+  //grid.SetGlobalInfo(4, 3, 3, 9);
+
+  inFile.open(edgelistFile.c_str(), std::ios::in | std::ios::binary);
+  edgeList = new int[numLocalEdges * 2];
+  for (int i = 0; i < 2*numLocalEdges; i++) {
+    inFile.read((char*)&edgeList[i++], sizeof edgeList[i++]);
+  }
+  inFile.close();
+
+  inFile.open(nodePoFile.c_str(), std::ios::in | std::ios::binary);
+  vertPotentials = new float[numLocalVerts * numVertPotentials];
+  int k = 0;
+  for (int i = 0; i < numLocalVerts * numVertPotentials; i++) {
+    inFile.read((char*)&vertPotentials[k++], sizeof vertPotentials[k++]);
+  }
+  inFile.close();
+
+  inFile.open(edgePoFile.c_str(), std::ios::in | std::ios::binary);
+  numEdgePotentials = numVertPotentials * numVertPotentials;
+  edgePotentials = new float[numLocalEdges * numEdgePotentials];
+  k = 0;
+  for (int i = 0; i < numLocalEdges * numEdgePotentials; i++) {
+    inFile.read((char*)&edgePotentials[k++], sizeof edgePotentials[k++]);
+  }
+  inFile.close();
+}
 /**
  * store the graph
  */
