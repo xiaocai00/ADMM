@@ -62,7 +62,7 @@ void Edge::UpdateMu()
  */
 //float penalty;
 //float penaltyPrime;
-void Edge::updateLambda(float penalty)
+void Edge::UpdateLambda(float penalty)
 {
   int j, len;
   for (int i = 0; i < nedges; i++) {
@@ -76,7 +76,7 @@ void Edge::updateLambda(float penalty)
 /**
  * ADMM update node and edge potential
  */
-void Edge::adjustPotentials(EdgeOp *edgeOp, float penalty)
+void Edge::AdjustPotentials(EdgeOp *edgeOp, float penalty)
 {
   int len = k << 1;
 #if 0
@@ -110,7 +110,7 @@ void Edge::adjustPotentials(EdgeOp *edgeOp, float penalty)
 /**
  *  ADMM update the edge
  */
-void Edge::optimizeEdge(EdgeOp *edgeOp, APGMem *aux, std::vector<float*>& vertexMuArr,
+void Edge::OptimizeEdge(EdgeOp *edgeOp, APGMem *aux, std::vector<float*>& vertexMuArr,
     int lvid, int rvid, float penaltyPrime) 
 {
   // update mu

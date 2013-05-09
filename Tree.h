@@ -44,11 +44,11 @@ class Edge {
   public:
     Edge(int kval);
     virtual ~Edge();
-    void setRho(float arho) {rho = arho;}
-    void setNedge(float anedges) {nedges = anedges;}
-    void updateLambda(float penalty);
-    void adjustPotentials(EdgeOp *edgeOp, float penalty);
-    void optimizeEdge(EdgeOp *edgeOp, APGMem *aux, 
+    void SetRho(float arho) {rho = arho;}
+    void SetNEdge(float anedges) {nedges = anedges;}
+    void UpdateLambda(float penalty);
+    void AdjustPotentials(EdgeOp *edgeOp, float penalty);
+    void OptimizeEdge(EdgeOp *edgeOp, APGMem *aux, 
         std::vector<float*>&, int, int, float penaltyPrime); 
 };
 

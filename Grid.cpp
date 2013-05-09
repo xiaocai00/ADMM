@@ -1225,12 +1225,12 @@ void Grid::Compute() {
     lvid = vSelfMapG2L[edgeList[i*2]];
     rvid = vSelfMapG2L[edgeList[i*2+1]];
     // update the lambda
-    edgeVal[i]->updateLambda(penalty);
+    edgeVal[i]->UpdateLambda(penalty);
     // adjust the potential
     //if (rank == 0)
-    edgeVal[i]->adjustPotentials(edgeOp, penalty);
+    edgeVal[i]->AdjustPotentials(edgeOp, penalty);
     // sum product
-    edgeVal[i]->optimizeEdge(edgeOp, aux, vertexMuArr, lvid, rvid, penaltyPrime);
+    edgeVal[i]->OptimizeEdge(edgeOp, aux, vertexMuArr, lvid, rvid, penaltyPrime);
   }
   logFile <<" after compute.....\n";
   //DisplayEdge();
