@@ -20,7 +20,7 @@
 #include "Grid.h"
 #include <fstream>
 #include "pnetcdf.h"
-#include "definition.h"
+#include "Definition.h"
 #include <limits>       // std::numeric_limits
 #define NDIMS 2
 #define HANDLE_ERROR {                                  \
@@ -81,6 +81,12 @@ Grid::Grid() :
   GraphBase(), edgeList(NULL), request(NULL), commBuffer(NULL), 
   aux(NULL), edgeOp(NULL), rhoEdge(1.0),
   penalty(0.1), penaltyPrime(0.5) {
+    numLocalEdges = 0;
+    numLocalVerts = 0;
+    numVertPotentials = 0;
+    numEdgePotentials = 0;
+    numGlobalRows = -1;
+    numGlobalCols = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #if DEBUG
@@ -902,34 +908,45 @@ void Grid::Convert(const std::string fname)
   std::string nodePoFile;
   std::string edgePoFile;
 
-  std::ifstream inFile(fname);
+  std::ifstream inFile(fname.c_str());
   if (inFile.is_open()) {
-    while (inFile.good()) {
+    if (inFile.good()) {
       getline(inFile, infoFile);
+      logFile << "info file:\t\t" << infoFile << std::endl;
       getline(inFile, edgelistFile);
+      logFile << "edge list file:\t\t" << edgelistFile << std::endl;
       getline(inFile, nodePoFile);
+      logFile << "node potential file:\t" << nodePoFile << std::endl;
       getline(inFile, edgePoFile);
+      logFile << "edge potential file:\t" << edgePoFile << std::endl;
     }
   }
   inFile.close();
 
-  inFile.open(infoFile.c_str(), std::ios::in | std::ios::binary);
+  inFile.open(infoFile.c_str());
   inFile >> numLocalVerts;
   inFile >> numLocalEdges;
   inFile >> numVertPotentials;
   inFile.close();
 
-  //grid.SetGlobalInfo(4, 3, 3, 9);
-
-  inFile.open(edgelistFile.c_str(), std::ios::in | std::ios::binary);
+  numEdgePotentials = numVertPotentials * numVertPotentials;
   edgeList = new int[numLocalEdges * 2];
+  memset(edgeList, 0, numLocalEdges * 2 * sizeof(int));
+  vertPotentials = new float[numLocalVerts * numVertPotentials];
+  memset(vertPotentials, 0, numLocalVerts * numVertPotentials * sizeof(float));
+  edgePotentials = new float[numLocalEdges * numEdgePotentials];
+  memset(edgePotentials, 0, numLocalEdges * numEdgePotentials * sizeof(float));
+  
+  numGlobalVerts = numLocalVerts;
+  numGlobalEdges = numLocalEdges;
+  return;
+  inFile.open(edgelistFile.c_str(), std::ios::in | std::ios::binary);
   for (int i = 0; i < 2*numLocalEdges; i++) {
     inFile.read((char*)&edgeList[i++], sizeof edgeList[i++]);
   }
   inFile.close();
 
   inFile.open(nodePoFile.c_str(), std::ios::in | std::ios::binary);
-  vertPotentials = new float[numLocalVerts * numVertPotentials];
   int k = 0;
   for (int i = 0; i < numLocalVerts * numVertPotentials; i++) {
     inFile.read((char*)&vertPotentials[k++], sizeof vertPotentials[k++]);
@@ -937,8 +954,6 @@ void Grid::Convert(const std::string fname)
   inFile.close();
 
   inFile.open(edgePoFile.c_str(), std::ios::in | std::ios::binary);
-  numEdgePotentials = numVertPotentials * numVertPotentials;
-  edgePotentials = new float[numLocalEdges * numEdgePotentials];
   k = 0;
   for (int i = 0; i < numLocalEdges * numEdgePotentials; i++) {
     inFile.read((char*)&edgePotentials[k++], sizeof edgePotentials[k++]);
@@ -949,6 +964,20 @@ void Grid::Convert(const std::string fname)
  * store the graph
  */
 void Grid::Save(const std::string fname) {
+  MPI_Bcast(&numGlobalVerts, 1, MPI_INT, 0, MPI_COMM_WORLD);  
+  MPI_Bcast(&numGlobalEdges, 1, MPI_INT, 0, MPI_COMM_WORLD);  
+  MPI_Bcast(&numVertPotentials, 1, MPI_INT, 0, MPI_COMM_WORLD);  
+  MPI_Bcast(&numEdgePotentials, 1, MPI_INT, 0, MPI_COMM_WORLD);  
+  MPI_Barrier(MPI_COMM_WORLD);
+  logFile << "---------------------------\n";
+  logFile << "numLocalVerts=" << numLocalVerts << std::endl;
+  logFile << "numLocalEdges=" << numLocalEdges << std::endl;
+  logFile << "numVertPotentials=" << numVertPotentials << std::endl;
+  logFile << "numEdgePotentials=" << numEdgePotentials << std::endl;
+  logFile << "numGlobalVerts=" << numGlobalVerts << std::endl;
+  logFile << "numGlobalEdges=" << numGlobalEdges << std::endl;
+  logFile << bbox << std::endl;
+  logFile << "---------------------------\n";
   int err, ncid;
   err = ncmpi_create(MPI_COMM_WORLD, fname.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid);
   HANDLE_ERROR
@@ -1283,7 +1312,7 @@ void Grid::Compute() {
     edgeVal[i]->UpdateLambda(penalty);
     // adjust the potential
     //if (rank == 0)
-    edgeVal[i]->AdjustPotentials(edgeOp, penalty);
+    edgeVal[i]->AdjustPotentials(edgeOp, penalty, rhoEdge);
     // sum product
     edgeVal[i]->OptimizeEdge(edgeOp, aux, vertexMuArr, lvid, rvid, penaltyPrime);
   }
@@ -1536,6 +1565,22 @@ void Grid::CommunicateByEdge() {
   }
 }
 
+double Grid::ComputeLinearObj()
+{
+  double obj = 0.0;
+  int lvid, rvid;
+  for (int i = 0; i < numLocalEdges; i++) {
+    lvid = vSelfMapG2L[edgeList[2*i]];
+    rvid = vSelfMapG2L[edgeList[2*i+1]];
+    for (int j = 0; j < numVertPotentials * 2; j++) {
+      obj += edgeVal[i]->x_potential_node[j] * edgeVal[i]->x_mu_node[j]; 
+    }
+    for(int j = 0; j < numEdgePotentials; j++) {
+      obj += edgeVal[i]->x_potential_edge[j] * edgeVal[i]->x_mu_edge[j]; 
+    }
+  }
+  return obj*rhoEdge;
+}
 /**
  * exchange the boundary vertcies' potentials
  * in order to get convergence.

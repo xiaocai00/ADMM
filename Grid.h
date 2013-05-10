@@ -100,29 +100,29 @@ class Grid: public GraphBase {
     void SetGlobalInfo(int globalRowSize, int globalColSize, 
         int verticePotentialSize, int edgePotentialSize);
     void SetGlobalInfo(const std::string fname);
+    std::vector<std::pair<int,int> > GetVerts();
     
     void SetPartitioner(Partitioner aPart) {part = aPart;}
     void SetRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }
     void Convert(const std::string fname);
-
-    std::vector<std::pair<int,int> > GetVerts();
     
     void Partition();
     void Generate();
     void Compute();
     void Communicate();
     void Update();
-    void Save(const std::string fname);
+    double ComputeLinearObj();
     
     void InitOptimization();
     void FinalizeOptimization();
     
-    
     void Load(std::string fname);
     void LoadByRow(const std::string fname);
     void LoadExample();
+    void Save(const std::string fname);
     
     void DisplayEdge();
+    
     int GetRank() {
       return rank;
     }

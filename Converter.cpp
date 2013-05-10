@@ -9,8 +9,12 @@ int main(int argc, char* argv[])
 {
   MPI_Init(&argc, &argv);
   MPI_Barrier(MPI_COMM_WORLD);
-  string fnameIn(argv[0]);
-  string fnameOut(argv[1]);
+  if (argc < 3) {
+    cerr << "./converter <infile> <outfile>\n";
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+  string fnameIn(argv[1]);
+  string fnameOut(argv[2]);
 
   Grid grid;
   if (grid.GetRank() == 0)

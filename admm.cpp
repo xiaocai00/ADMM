@@ -91,7 +91,9 @@ int main(int argc, char* argv[])
  
   PROFILE(optTime);
   MPI_Barrier(MPI_COMM_WORLD);
-  
+  double obj = grid.ComputeLinearObj();
+  double total_obj;
+  MPI_Reduce(&obj, &total_obj, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
   double runTime = MPI_Wtime() - startRun;
 
   MPI_GETMAX(commTime, maxCommTime);

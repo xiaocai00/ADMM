@@ -22,7 +22,6 @@ class Edge {
     int k;
     int ksquare;
     int nedges;
-    float rho;
     // node
     float *x_mu_node;
     float *x_potential_node;
@@ -44,10 +43,9 @@ class Edge {
   public:
     Edge(int kval);
     virtual ~Edge();
-    void SetRho(float arho) {rho = arho;}
     void SetNEdge(float anedges) {nedges = anedges;}
     void UpdateLambda(float penalty);
-    void AdjustPotentials(EdgeOp *edgeOp, float penalty);
+    void AdjustPotentials(EdgeOp *edgeOp, float penalty, float rho);
     void OptimizeEdge(EdgeOp *edgeOp, APGMem *aux, 
         std::vector<float*>&, int, int, float penaltyPrime); 
 };

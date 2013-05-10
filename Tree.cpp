@@ -32,7 +32,6 @@ Edge::Edge(int kval) : k(kval), ksquare(kval*kval){
     lambda_node[i+k] = 0.0;
   }
   nedges = 1;
-  rho = 1;
 }
 
 Edge::~Edge() {
@@ -76,7 +75,7 @@ void Edge::UpdateLambda(float penalty)
 /**
  * ADMM update node and edge potential
  */
-void Edge::AdjustPotentials(EdgeOp *edgeOp, float penalty)
+void Edge::AdjustPotentials(EdgeOp *edgeOp, float penalty, float rho)
 {
   int len = k << 1;
 #if 0
