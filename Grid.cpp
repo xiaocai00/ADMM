@@ -200,12 +200,97 @@ void Grid::Update() {
  *
  */
 void Grid::InitNeighborsByEdge() {
-  int sbuf[2];
-  sbuf[0] = vertexStart;
-  sbuf[1] = vertexEnd;
+  int offlenListSize = offlenList.size();
+  int *rbuf = new int[numProcs];
+  int *sbuf = new int[offlenListSize * 2];
+  int *disp = new int[numProcs];
+  
+  // gather offlen List size 
+  MPI_Allgather(&offlenListSize, 1, MPI_INT, rbuf, 1, MPI_INT, MPI_COMM_WORLD);
+  // gather offlenList
+  int totalSize = 0;
+  for (int i = 0; i < numProcs; i++) {
+    totalSize += rbuf[i];
+    logFile << i << ": " << rbuf[i] << "\t";
+  }
+  logFile << std::endl; // << "totalSize=" << totalSize << std::endl; 
+  disp[0] = 0;
+  for (int i = 1; i < numProcs; i++) {
+    disp[i] = rbuf[i-1]*2 + disp[i-1];
+    logFile << disp[i] << ", "; 
+  }
+  logFile << std::endl;
+  for (int i = 0; i < offlenListSize; i++) {
+    sbuf[2*i] = offlenList[i].first; 
+    sbuf[2*i+1] = offlenList[i].second; 
+  }
+  int *offlenBuf = new int[2 * totalSize];
+  int *recvCnt = new int[numProcs];
+  for (int i = 0; i < numProcs; i++) {
+    recvCnt[i] = 2*rbuf[i];
+  }
+  MPI_Allgatherv(sbuf, 2*offlenListSize, MPI_INT, offlenBuf, recvCnt,
+      disp, MPI_INT, MPI_COMM_WORLD);
+  int idx = 0; 
+  for (int i = 0; i < totalSize; i++) {
+    if (2*i >= disp[idx]) {
+      idx++;
+      //logFile << std::endl;
+    }
+    //logFile << rank << ", " << idx << ": " << offlenBuf[2*i] << ", " << offlenBuf[2*i+1] << std::endl;
+  }
+  //logFile << std::endl;
+  // construct neighbors 
+  int totalCnt = 0;
+  for (int i = 0; i < numProcs; i++) {
+    if (rank == i)
+      continue;
+    int minV = std::numeric_limits<int>::max();
+    int maxV = 0;
+    for (int j = disp[i]; j < disp[i] + rbuf[i]*2; j = j+2) {
+      if (offlenBuf[j] < minV)
+        minV = offlenBuf[j];
+      if ((offlenBuf[j] + offlenBuf[j + 1] - 1) > maxV)
+        maxV = offlenBuf[j] + offlenBuf[j + 1] - 1;
+    }
+    //logFile << "proc "  << i << " min/max: " << minV << ", "  << maxV << std::endl;
+    //logFile << i << "(" << rbuf[i] << "): " << offlenBuf[2*j] << ", " << offlenBuf[2*j+1] << std::endl;
+    // non overlap
+    if ( minV > vertexEnd || vertexStart > maxV) {
+      continue; 
+    }
+    //logFile << "proc "  << rank << " and " << i << " overlapped\n";
+    neighbors.push_back(i);
+  }
 
-  int *rbuf = new int[2 * numProcs];
-  // broadcast my offset range
+  outNeighborMapEdge.resize(neighbors.size());
+  for (int i = 0; i < neighbors.size(); i++) {
+    std::vector<int> off;
+    std::vector<int> len;
+    for (int j = disp[neighbors[i]]; j < disp[neighbors[i]] + rbuf[neighbors[i]]*2; j = j+2) {
+      off.push_back(offlenBuf[j]);
+      len.push_back(offlenBuf[j + 1]);
+    }
+    for (int j = 0; j < off.size(); j++) {            // other
+      for (int k = 0; k < offlenList.size(); k++) {   // self
+        int lowerbound, upperbound;
+        lowerbound = offlenList[k].first;
+        if (off[j] > lowerbound)
+          lowerbound = off[j];
+        upperbound = off[j] + len[j] - 1; 
+        if (upperbound > (offlenList[k].first + offlenList[k].second - 1)) {
+          upperbound = offlenList[k].first + offlenList[k].second - 1;
+        }
+        logFile << "proc "  << neighbors[i] << " low/upp: " << lowerbound << ", "  << upperbound  << std::endl;
+        for (; lowerbound <= upperbound; lowerbound++) {
+          outNeighborMapEdge[i].push_back(lowerbound);
+          totalCnt++;
+        }
+      }
+    }
+  }
+  logFile << "totalCnt=" <<totalCnt << std::endl; 
+  /*
   MPI_Allgather(sbuf, 2, MPI_INT, rbuf, 2, MPI_INT, MPI_COMM_WORLD );
 
   for (int i = 0; i < numProcs; i++) {
@@ -234,6 +319,7 @@ void Grid::InitNeighborsByEdge() {
     }
     totalCnt += outNeighborMapEdge[i].size();
   }
+  */
   MPI_Request request;
   std::vector<MPI_Request> requests(neighbors.size() * 2);
   requests.resize(2*neighbors.size());
@@ -286,8 +372,14 @@ void Grid::InitNeighborsByEdge() {
       totalCnt += vertCnt[i];
   }
 
+  DisplayNeighborsByEdge();
+  DisplaySelf();
+  delete recvCnt;
   delete rbuf;
   delete recvBuf;
+  delete sbuf;
+  delete disp;
+  delete offlenBuf;
 #endif
 }
 
@@ -673,6 +765,38 @@ void Grid::LoadExample()
 
   edgeList = new int[2*numLocalEdges];
   if (rank == 0) {
+    numLocalEdges = 2;
+    edgeList[0] = 0; edgeList[1] = 1;
+    edgeList[2] = 1; edgeList[3] = 2;
+  }
+  if (rank == 1) {
+    numLocalEdges = 2;
+    edgeList[0] = 0; edgeList[1] = 3;
+    edgeList[2] = 1; edgeList[3] = 4;
+  }
+  if (rank == 2) {
+    numLocalEdges = 2;
+    edgeList[0] = 2; edgeList[1] = 5;
+    edgeList[2] = 3; edgeList[3] = 4;
+  }
+  if (rank == 3) {
+    numLocalEdges = 2;
+    edgeList[0] = 4; edgeList[1] = 5;
+    edgeList[2] = 3; edgeList[3] = 6;
+  }
+  if (rank == 4) {
+    numLocalEdges = 2;
+    edgeList[0] = 4; edgeList[1] = 7;
+    edgeList[2] = 5; edgeList[3] = 8;
+  }
+  if (rank == 5) {
+    numLocalEdges = 2;
+    edgeList[0] = 6; edgeList[1] = 7;
+    edgeList[2] = 7; edgeList[3] = 8;
+  }
+  
+  /*  
+  if (rank == 0) {
     numLocalEdges = 4;
     edgeList[0] = 0; edgeList[1] = 1;
     edgeList[2] = 1; edgeList[3] = 2;
@@ -703,13 +827,14 @@ void Grid::LoadExample()
     edgeList[6] = 9; edgeList[7] = 10;
     edgeList[8] = 10; edgeList[9] = 11;
   }
-
-  std::vector<std::pair<int,int> > offlenList = GetVerts();
+  */
+  GetVerts();
   logFile << "***************************************\n";
   logFile << "***************************************\n";
   logFile << "numLocalEdges/numLocalVerts: " << numLocalEdges << ", " << numLocalVerts << std::endl;
   logFile << "numVert/EdgePotentials: " << numVertPotentials << ", " 
           << numEdgePotentials << std::endl << std::endl; 
+#if 1  
   vertPotentials = new float[(vertexEnd - vertexStart + 1) * numVertPotentials];
   edgePotentials = new float[numLocalEdges * numEdgePotentials];
   
@@ -728,11 +853,11 @@ void Grid::LoadExample()
   edgeVal.resize(numLocalEdges);
   for (int i = 0; i < numLocalEdges; i++)
     edgeVal[i] = new Edge(numVertPotentials);
-
+#endif
+  DisplaySelf();
 }
 
-std::vector<std::pair<int,int> > Grid::GetVerts() {
-  std::vector<std::pair<int, int> > offlenList;
+void Grid::GetVerts() {
   int *verts = new int[numLocalEdges << 1];
   memcpy(verts, edgeList, (numLocalEdges << 1) * sizeof(int));
   std::sort(verts, verts + (numLocalEdges<<1));
@@ -743,26 +868,29 @@ std::vector<std::pair<int,int> > Grid::GetVerts() {
 
   int idx = 0;
   int len = 1; 
- 
+
   int vidx = 0;
+  int vstart = 0;
   for (int i = 1; i < (numLocalEdges << 1); i++) {
     if (verts[i] == verts[idx]) {
       vertCnt[vidx]++; 
     } else {
       if (verts[i] == verts[idx] + 1) {
         len++;
+        idx = i;
       } else {
-        offlenList.push_back(std::make_pair<int, int> (verts[idx], len));
+        offlenList.push_back(std::make_pair<int, int> (verts[vstart], len));
         len = 1;
+        idx = i;
+        vstart = i;
       }
       vSelfVec.push_back(verts[i]);
       vertCnt.push_back(1);
-      idx = i;
       vidx++;
     }
   }
-
-  offlenList.push_back(std::make_pair<int, int> (verts[idx], len));
+  // global id and length
+  offlenList.push_back(std::make_pair<int, int> (verts[vstart], len));
   numLocalVerts = vSelfVec.size();
   for (int i = 0; i < numLocalVerts; i++) {
     vSelfMapG2L[vSelfVec[i]] = i; 
@@ -770,7 +898,6 @@ std::vector<std::pair<int,int> > Grid::GetVerts() {
   
   // constrcuct vertex offset and length list
   delete verts;
-  return offlenList;
 }
 
 void Grid::LoadByRow(const std::string fname) {
@@ -1161,8 +1288,13 @@ void Grid::DisplaySelf() {
   logFile << "self vID:\t";
   for (int i = 0; i < vSelfVec.size(); i++)
     logFile << "(" << vSelfVec[i] << ", " << vertCnt[i] <<")\t";
+  logFile << std::endl << "\t\t";
+   
+  for (int i = 0; i < offlenList.size(); i++) {
+    logFile << "(" << offlenList[i].first << ", " << offlenList[i].second <<")\t";
+  }
   logFile << std::endl;
-
+  
   logFile << "self elist:\t";
   for (int i = 0 ; i < numLocalEdges; i++)
     logFile << "(" << edgeList[2 * i] << ", " << edgeList[2 * i + 1] << ")\t"; 
@@ -1384,6 +1516,7 @@ void Grid::InitOptimization() {
   InitNeighbors();
   DisplaySelf();
   InitCommunication();
+  DisplayNeighborsByEdge();
   ResetVertexMuArr();
   for (int i = 0; i < numLocalEdges; i++) {
     int lvid = vSelfMapG2L[edgeList[2*i]];
@@ -1393,6 +1526,7 @@ void Grid::InitOptimization() {
       vertexMuArr[rvid][j] += vertPotentials[rvid*numVertPotentials + j];
     }
   }
+  return;
   Communicate();
   UpdateMuArrAfterComm(); 
   InitTree();

@@ -49,6 +49,7 @@ class Grid: public GraphBase {
     std::map<int, std::set<int> > inNeighborMap;
     std::map<int, std::set<int> > internalNeighborMap;
     std::map<int, int> vSelfMapG2L;
+    std::vector<std::pair<int, int> > offlenList;
     std::vector<int> vSelfVec;
     std::vector<float*> vertexMuArr;
     std::vector<int> neighbors;
@@ -97,10 +98,10 @@ class Grid: public GraphBase {
     Grid(int localRowSize, int localColSize, int glocalRowSize, int globalColSize,
         int verticePotentialSize, int edgePotentialSize);
     
+    void GetVerts();
     void SetGlobalInfo(int globalRowSize, int globalColSize, 
-        int verticePotentialSize, int edgePotentialSize);
+    int verticePotentialSize, int edgePotentialSize);
     void SetGlobalInfo(const std::string fname);
-    std::vector<std::pair<int,int> > GetVerts();
     
     void SetPartitioner(Partitioner aPart) {part = aPart;}
     void SetRhoEdge(float aRhoEdge) {rhoEdge = aRhoEdge; }

@@ -65,11 +65,13 @@ int main(int argc, char* argv[])
 
   PROFILE(allocTime);
 
-  //grid.LoadExample();
-  grid.Load(fname);
-  PROFILE(loadTime);
+  grid.LoadExample();
+  //grid.Load(fname);
+  //PROFILE(loadTime);
 
   grid.InitOptimization();
+  MPI_Finalize();
+  return 0;
   totalRuns = 1; 
   // Optimization
   while(irun++ < totalRuns) {
