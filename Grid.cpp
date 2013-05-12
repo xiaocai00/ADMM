@@ -29,9 +29,6 @@
       ncmpi_strerror(err), rank);                  	    \
 }
 
-//#define DEBUG
-//#define GENERATE 
-
 /**
  *
  */
@@ -89,7 +86,7 @@ Grid::Grid() :
     numGlobalCols = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#if DEBUG
+#if DEBUG1
     std::ostringstream ss;
     ss << "log_" << rank << ".txt";
     logFile.open(ss.str().c_str());
@@ -107,12 +104,11 @@ void Grid::SetGlobalInfo(int globalRowSize, int globalColSize,
   numGlobalVerts = globalRowSize * globalColSize;
   numGlobalEdges = globalRowSize * (globalColSize - 1)
     + globalColSize * (globalRowSize - 1);
-
 #if 0 
   int numLocalRows, int numLocalCols,
-      numLocalVerts = numLocalRows * numLocalCols;
+  numLocalVerts = numLocalRows * numLocalCols;
   numLocalEdges = localRowSize * (localColSize - 1) +
-    localColSize * (localRowSize - 1);
+                  localColSize * (localRowSize - 1);
   numLocalEdgesGhost = numLocalEdges;
   edgeVal.resize(numLocalEdges);
 #endif
@@ -123,7 +119,7 @@ void Grid::SetGlobalInfo(int globalRowSize, int globalColSize,
  *
  */
 Grid::~Grid() {
-#if DEBUG
+#if DEBUG1
   logFile.close();
 #endif
   if (edgeList)
@@ -135,9 +131,9 @@ Grid::~Grid() {
   for (int i = 0; i < edgeVal.size(); i++)
     delete edgeVal[i];
   // release the memory
-  for (int i = 0; i < vertexMuArr.size(); i++) {
-    if (vertexMuArr[i])
-      delete vertexMuArr[i];
+  for (int i = 0; i < vertMuArr.size(); i++) {
+    if (vertMuArr[i])
+      delete vertMuArr[i];
   }
   if (aux)
     delete aux;
@@ -147,22 +143,21 @@ Grid::~Grid() {
 
 void Grid::ResetVertexMuArr() {
   for (int i = 0; i < numLocalVerts; i++) {
-    memset(vertexMuArr[i], 0, sizeof(float) * numVertPotentials);
+    memset(vertMuArr[i], 0, sizeof(float) * numVertPotentials);
   }
 }
 
 void Grid::UpdateMuArrBeforeComm() {
   ResetVertexMuArr();
-#if 1
   // update all the local information
   for (int i = 0; i < (numLocalEdges << 1); i++) {
     int nodeid = vSelfMapG2L[edgeList[i]];
     for (int j = 0; j < numVertPotentials; j++) {
-      vertexMuArr[nodeid][j] += edgeVal[i / 2]->x_mu_node[j
+      vertMuArr[nodeid][j] += edgeVal[i / 2]->x_mu_node[j
         + numVertPotentials * i % 2];
     }
+    //DisplayMuArr();
   }
-#endif
 }
 
 void Grid::UpdateMuArrAfterComm() {
@@ -171,7 +166,8 @@ void Grid::UpdateMuArrAfterComm() {
     for (int j = 0; j < outNeighborMapEdge[i].size(); j++) {
       int nodeid = vSelfMapG2L[outNeighborMapEdge[i][j]];
       for (int k = 0; k < numVertPotentials; k++) {
-        vertexMuArr[nodeid][k] += commBuffer[i][j*numVertPotentials+k] * cntNeighborMapEdge[i][j];
+        vertMuArr[nodeid][k] += 
+          recvBuffer[i][j * numVertPotentials + k];
       }
     }
   }
@@ -179,7 +175,7 @@ void Grid::UpdateMuArrAfterComm() {
   // average the value
   for (int i = 0; i < numLocalVerts; i++) {
     for (int j = 0; j < numVertPotentials; j++) {
-      vertexMuArr[i][j] /= vertCnt[i];
+      vertMuArr[i][j] /= vertCnt[i];
     }
   }
 }
@@ -192,7 +188,7 @@ void Grid::Update() {
   for (int i = 0; i < (numLocalEdges << 1); i++) {
     int nodeid = vSelfMapG2L[edgeList[i]];
     memcpy(edgeVal[i/2]->edge_mu_node + (i % 2) * numVertPotentials,
-        vertexMuArr[nodeid], numVertPotentials * sizeof(float));
+        vertMuArr[nodeid], numVertPotentials * sizeof(float));
   }
 }
 
@@ -211,23 +207,21 @@ void Grid::InitNeighborsByEdge() {
   int totalSize = 0;
   for (int i = 0; i < numProcs; i++) {
     totalSize += rbuf[i];
-    logFile << i << ": " << rbuf[i] << "\t";
   }
-  logFile << std::endl; // << "totalSize=" << totalSize << std::endl; 
   disp[0] = 0;
   for (int i = 1; i < numProcs; i++) {
     disp[i] = rbuf[i-1]*2 + disp[i-1];
-    logFile << disp[i] << ", "; 
   }
-  logFile << std::endl;
+
+  int *recvCnt = new int[numProcs];
+  int *offlenBuf = new int[2 * totalSize];
+
+  for (int i = 0; i < numProcs; i++) {
+    recvCnt[i] = 2*rbuf[i];
+  }
   for (int i = 0; i < offlenListSize; i++) {
     sbuf[2*i] = offlenList[i].first; 
     sbuf[2*i+1] = offlenList[i].second; 
-  }
-  int *offlenBuf = new int[2 * totalSize];
-  int *recvCnt = new int[numProcs];
-  for (int i = 0; i < numProcs; i++) {
-    recvCnt[i] = 2*rbuf[i];
   }
   MPI_Allgatherv(sbuf, 2*offlenListSize, MPI_INT, offlenBuf, recvCnt,
       disp, MPI_INT, MPI_COMM_WORLD);
@@ -235,11 +229,9 @@ void Grid::InitNeighborsByEdge() {
   for (int i = 0; i < totalSize; i++) {
     if (2*i >= disp[idx]) {
       idx++;
-      //logFile << std::endl;
     }
-    //logFile << rank << ", " << idx << ": " << offlenBuf[2*i] << ", " << offlenBuf[2*i+1] << std::endl;
   }
-  //logFile << std::endl;
+  
   // construct neighbors 
   int totalCnt = 0;
   for (int i = 0; i < numProcs; i++) {
@@ -253,21 +245,19 @@ void Grid::InitNeighborsByEdge() {
       if ((offlenBuf[j] + offlenBuf[j + 1] - 1) > maxV)
         maxV = offlenBuf[j] + offlenBuf[j + 1] - 1;
     }
-    //logFile << "proc "  << i << " min/max: " << minV << ", "  << maxV << std::endl;
-    //logFile << i << "(" << rbuf[i] << "): " << offlenBuf[2*j] << ", " << offlenBuf[2*j+1] << std::endl;
-    // non overlap
     if ( minV > vertexEnd || vertexStart > maxV) {
       continue; 
     }
-    //logFile << "proc "  << rank << " and " << i << " overlapped\n";
     neighbors.push_back(i);
   }
 
+  // construct outNeighborMapEdge
   outNeighborMapEdge.resize(neighbors.size());
   for (int i = 0; i < neighbors.size(); i++) {
     std::vector<int> off;
     std::vector<int> len;
-    for (int j = disp[neighbors[i]]; j < disp[neighbors[i]] + rbuf[neighbors[i]]*2; j = j+2) {
+    for (int j = disp[neighbors[i]]; 
+        j < disp[neighbors[i]] + rbuf[neighbors[i]]*2; j = j+2) {
       off.push_back(offlenBuf[j]);
       len.push_back(offlenBuf[j + 1]);
     }
@@ -281,7 +271,6 @@ void Grid::InitNeighborsByEdge() {
         if (upperbound > (offlenList[k].first + offlenList[k].second - 1)) {
           upperbound = offlenList[k].first + offlenList[k].second - 1;
         }
-        logFile << "proc "  << neighbors[i] << " low/upp: " << lowerbound << ", "  << upperbound  << std::endl;
         for (; lowerbound <= upperbound; lowerbound++) {
           outNeighborMapEdge[i].push_back(lowerbound);
           totalCnt++;
@@ -289,70 +278,32 @@ void Grid::InitNeighborsByEdge() {
       }
     }
   }
-  logFile << "totalCnt=" <<totalCnt << std::endl; 
-  /*
-  MPI_Allgather(sbuf, 2, MPI_INT, rbuf, 2, MPI_INT, MPI_COMM_WORLD );
-
-  for (int i = 0; i < numProcs; i++) {
-    if (i == rank || sbuf[0] > rbuf[2 * i + 1] || sbuf[1] < rbuf[2 * i])
-      continue;
-    neighbors.push_back(i);
-  }
-  
-  // overlap based on edges
-  int totalCnt = 0;
-  outNeighborMapEdge.resize(neighbors.size());
-  
-  for (int i = 0; i < neighbors.size(); i++) {
-    int overlapStart, overlapLen;
-    // left
-    int nid = neighbors[i];
-    if (sbuf[0] < rbuf[nid * 2]) {
-      overlapStart = rbuf[nid * 2];
-      overlapLen = sbuf[1] - rbuf[nid * 2] + 1;
-    } else {
-      overlapStart = sbuf[0];
-      overlapLen = rbuf[nid * 2 + 1] - sbuf[0] + 1;
-    }
-    for (int j = overlapStart; j < overlapLen + overlapStart; j++) {
-      outNeighborMapEdge[i].push_back(j);
-    }
-    totalCnt += outNeighborMapEdge[i].size();
-  }
-  */
-  MPI_Request request;
-  std::vector<MPI_Request> requests(neighbors.size() * 2);
-  requests.resize(2*neighbors.size());
   
   int* recvBuf = new int[totalCnt];
-  if (2*numProcs < totalCnt) { 
-    delete rbuf;
-    rbuf = new int[totalCnt];
-  }
+  int *sendBuf = new int[totalCnt];
+  MPI_Request *requests = (MPI_Request*) malloc(sizeof(MPI_Request) * neighbors.size() * 2);
+  
   totalCnt = 0;
   int reqidx = 0;
   for (int i = 0; i < neighbors.size(); i++) {
     int nid = neighbors[i];
     int cnt = outNeighborMapEdge[i].size();
-    for (int idx = 0; idx < outNeighborMapEdge[i].size(); idx++) {
-      int vid = vSelfMapG2L[outNeighborMapEdge[i][idx]];
-      rbuf[totalCnt + idx] = vertCnt[vid];
+    for (int j = 0; j < outNeighborMapEdge[i].size(); j++) {
+      int vid = vSelfMapG2L[outNeighborMapEdge[i][j]];
+      sendBuf[totalCnt + j] = vertCnt[vid];
     }
-    logFile << std::endl;
-    
-    MPI_Isend(rbuf + totalCnt, cnt, 
-        MPI_INT, nid, rank, MPI_COMM_WORLD, &requests[reqidx++]);
+    MPI_Isend(sendBuf + totalCnt, cnt,
+        MPI_INT, nid, rank, MPI_COMM_WORLD, &requests[reqidx]);
+    reqidx++;
     MPI_Irecv(recvBuf + totalCnt, cnt, MPI_INT, nid, nid, MPI_COMM_WORLD, 
-        &requests[reqidx++]);
-    
+        &requests[reqidx]);
+    reqidx++;
     totalCnt += cnt;
   }
-  MPI_Status status;
   
-#if 1
+  MPI_Status status;
   for (int i = 0; i < reqidx; i++)
     MPI_Wait(&requests[i], &status);
-  
   totalCnt = 0;
   cntNeighborMapEdge.resize(neighbors.size());
   for (int i = 0; i < neighbors.size(); i++) {
@@ -367,23 +318,20 @@ void Grid::InitNeighborsByEdge() {
     totalCnt += cnt;
   }
 
-  totalCnt = 0;
-  for (int i = 0; i < numLocalVerts; i++) {
-      totalCnt += vertCnt[i];
-  }
-
   DisplayNeighborsByEdge();
   DisplaySelf();
-  delete recvCnt;
-  delete rbuf;
+  delete requests;
+  delete sendBuf;
   delete recvBuf;
+  delete recvCnt;
+  delete offlenBuf;
+  delete rbuf;
   delete sbuf;
   delete disp;
-  delete offlenBuf;
-#endif
 }
 
 void Grid::DisplayNeighborsByEdge() {
+#ifdef DEBUG
   logFile << "---------------------\n";
   logFile << "DisplayOutNeighbors " << neighbors.size() << std::endl;
   for (int i = 0; i < neighbors.size(); i++) {
@@ -394,6 +342,7 @@ void Grid::DisplayNeighborsByEdge() {
     }
     logFile << std::endl;
   }
+#endif
 }
 
 void Grid::Load(std::string fname) {
@@ -401,6 +350,7 @@ void Grid::Load(std::string fname) {
     PartitionByRow();
     LoadByRow(fname);
   } else if (part == EDGE) {
+    logFile << "load from " << fname << std::endl;
     PartitionByEdge(fname);
   } else {
     std::cerr << "only supported for the case: " << numGlobalCols << " = "
@@ -724,10 +674,12 @@ void Grid::SetGlobalInfo(const std::string fname) {
   numGlobalCols = gCols;
   numVertPotentials = nvPotentials;
   numEdgePotentials = nePotentials;
-
-  numGlobalVerts = numGlobalRows * numGlobalCols;
-  numGlobalEdges = numGlobalRows * (numGlobalCols - 1)
-    + numGlobalCols * (numGlobalRows - 1);
+  
+  numGlobalVerts = gVertices;
+  numGlobalEdges = gEdges;
+  //numGlobalVerts = numGlobalRows * numGlobalCols;
+  //numGlobalEdges = numGlobalRows * (numGlobalCols - 1)
+  //  + numGlobalCols * (numGlobalRows - 1);
 
 #ifdef DEBUG
   logFile << "\n-------------- GET GLOBAL INFO --------------\n";
@@ -829,12 +781,12 @@ void Grid::LoadExample()
   }
   */
   GetVerts();
-  logFile << "***************************************\n";
+#ifdef DEBUG
   logFile << "***************************************\n";
   logFile << "numLocalEdges/numLocalVerts: " << numLocalEdges << ", " << numLocalVerts << std::endl;
   logFile << "numVert/EdgePotentials: " << numVertPotentials << ", " 
-          << numEdgePotentials << std::endl << std::endl; 
-#if 1  
+          << numEdgePotentials << std::endl << std::endl;
+#endif
   vertPotentials = new float[(vertexEnd - vertexStart + 1) * numVertPotentials];
   edgePotentials = new float[numLocalEdges * numEdgePotentials];
   
@@ -853,8 +805,9 @@ void Grid::LoadExample()
   edgeVal.resize(numLocalEdges);
   for (int i = 0; i < numLocalEdges; i++)
     edgeVal[i] = new Edge(numVertPotentials);
-#endif
+#ifdef DEBUG
   DisplaySelf();
+#endif
 }
 
 void Grid::GetVerts() {
@@ -996,19 +949,19 @@ void Grid::InitTree() {
     // need normalization
     for (int j = 0; j < numVertPotentials; j++) {
       edgeVal[i]->x_potential_node[j] = 
-        vertexMuArr[lvid1][j] / (rhoEdge * vertCnt[lvid1]);
+        vertMuArr[lvid1][j] / (rhoEdge * vertCnt[lvid1]);
       edgeVal[i]->x_potential_node[numVertPotentials + j] = 
-        vertexMuArr[lvid2][j] / (rhoEdge * vertCnt[lvid2]);
+        vertMuArr[lvid2][j] / (rhoEdge * vertCnt[lvid2]);
       edgeVal[i]->x_mu_node[j] = 1.0/(float)numVertPotentials;
       edgeVal[i]->edge_mu_node[j] = 1.0/(float)numVertPotentials;
 #if 0      
       if (i == 2) {
         logFile << "x_potential_node=" << edgeVal[i]->x_potential_node[j] << std::endl; 
-        logFile << "numerator= " << vertexMuArr[lvid1][j] *rhoEdge << std::endl; 
+        logFile << "numerator= " << vertMuArr[lvid1][j] *rhoEdge << std::endl; 
         logFile << "denumerator= " << rhoEdge * vertCnt[lvid2] << std::endl;
         
         logFile << "x_potential_node=" << edgeVal[i]->x_potential_node[numVertPotentials + j] << std::endl; 
-        logFile << "numerator= " << vertexMuArr[lvid2][j] *rhoEdge << std::endl; 
+        logFile << "numerator= " << vertMuArr[lvid2][j] *rhoEdge << std::endl; 
         logFile << "denumerator= " << rhoEdge * vertCnt[lvid2] << std::endl;
       }
 #endif
@@ -1039,13 +992,14 @@ void Grid::Convert(const std::string fname)
   if (inFile.is_open()) {
     if (inFile.good()) {
       getline(inFile, infoFile);
-      logFile << "info file:\t\t" << infoFile << std::endl;
+      std::cout << "info file:\t\t" << infoFile << std::endl;
+      //logFile << "info file:\t\t" << infoFile << std::endl;
       getline(inFile, edgelistFile);
-      logFile << "edge list file:\t\t" << edgelistFile << std::endl;
+      //logFile << "edge list file:\t\t" << edgelistFile << std::endl;
       getline(inFile, nodePoFile);
-      logFile << "node potential file:\t" << nodePoFile << std::endl;
+      //logFile << "node potential file:\t" << nodePoFile << std::endl;
       getline(inFile, edgePoFile);
-      logFile << "edge potential file:\t" << edgePoFile << std::endl;
+      //logFile << "edge potential file:\t" << edgePoFile << std::endl;
     }
   }
   inFile.close();
@@ -1066,10 +1020,10 @@ void Grid::Convert(const std::string fname)
   
   numGlobalVerts = numLocalVerts;
   numGlobalEdges = numLocalEdges;
-  return;
+  
   inFile.open(edgelistFile.c_str(), std::ios::in | std::ios::binary);
   for (int i = 0; i < 2*numLocalEdges; i++) {
-    inFile.read((char*)&edgeList[i++], sizeof edgeList[i++]);
+    inFile.read((char*)&edgeList[i], sizeof edgeList[i]);
   }
   inFile.close();
 
@@ -1096,6 +1050,7 @@ void Grid::Save(const std::string fname) {
   MPI_Bcast(&numVertPotentials, 1, MPI_INT, 0, MPI_COMM_WORLD);  
   MPI_Bcast(&numEdgePotentials, 1, MPI_INT, 0, MPI_COMM_WORLD);  
   MPI_Barrier(MPI_COMM_WORLD);
+#ifdef DEBUG
   logFile << "---------------------------\n";
   logFile << "numLocalVerts=" << numLocalVerts << std::endl;
   logFile << "numLocalEdges=" << numLocalEdges << std::endl;
@@ -1105,6 +1060,7 @@ void Grid::Save(const std::string fname) {
   logFile << "numGlobalEdges=" << numGlobalEdges << std::endl;
   logFile << bbox << std::endl;
   logFile << "---------------------------\n";
+#endif
   int err, ncid;
   err = ncmpi_create(MPI_COMM_WORLD, fname.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid);
   HANDLE_ERROR
@@ -1284,12 +1240,13 @@ void Grid::DisplayNeighbors() {
 }
 
 void Grid::DisplaySelf() {
+#ifdef DEBUG
   logFile << "-----------SELF NODE/EDGE Potentials----------\n";
   logFile << "self vID:\t";
   for (int i = 0; i < vSelfVec.size(); i++)
     logFile << "(" << vSelfVec[i] << ", " << vertCnt[i] <<")\t";
-  logFile << std::endl << "\t\t";
-   
+  logFile << std::endl;
+  logFile << "offlen List:\t";
   for (int i = 0; i < offlenList.size(); i++) {
     logFile << "(" << offlenList[i].first << ", " << offlenList[i].second <<")\t";
   }
@@ -1321,6 +1278,7 @@ void Grid::DisplaySelf() {
     }
     logFile << std::endl;
   }
+#endif
 }
 
 /**
@@ -1417,24 +1375,24 @@ void Grid::VerifyNeighbors() {
 
 void Grid::DisplayMuArr()
 {
+#ifdef DEBUG
   logFile << "------------------MuArr----------------\n";
-  for (int i = 0; i < vertexMuArr.size(); i++) {
+  for (int i = 0; i < vertMuArr.size(); i++) {
     logFile << i << ": ";
     for (int j = 0; j < numVertPotentials; j++) {
-      logFile << vertexMuArr[i][j] << " ";
+      logFile << vertMuArr[i][j] << " ";
     }
     logFile << "\n";
   }
+#endif
 }
 /**
  *
  */
 void Grid::Compute() {
   //logFile << "numVertPotentials=" << numVertPotentials << std::endl;
-  logFile <<" before compute.....\n";
-  DisplayEdge();
   int lvid, rvid;
-  // reset vertexMuArr b/c we will use it to hold the partial sum for shared nodes
+  // reset vertMuArr b/c we will use it to hold the partial sum for shared nodes
   ResetVertexMuArr();
 #if 1
   for (int i = 0; i < edgeVal.size(); i++) {
@@ -1446,10 +1404,8 @@ void Grid::Compute() {
     //if (rank == 0)
     edgeVal[i]->AdjustPotentials(edgeOp, penalty, rhoEdge);
     // sum product
-    edgeVal[i]->OptimizeEdge(edgeOp, aux, vertexMuArr, lvid, rvid, penaltyPrime);
+    edgeVal[i]->OptimizeEdge(edgeOp, aux, vertMuArr, lvid, rvid, penaltyPrime);
   }
-  logFile <<" after compute.....\n";
-  //DisplayEdge();
 #endif
 }
 
@@ -1512,52 +1468,22 @@ void Grid::DisplayEdge()
 }
 
 void Grid::InitOptimization() {
-  logFile << "------------InitOptimization-------------\n";
   InitNeighbors();
-  DisplaySelf();
   InitCommunication();
-  DisplayNeighborsByEdge();
+  //DisplayNeighborsByEdge();
   ResetVertexMuArr();
-  for (int i = 0; i < numLocalEdges; i++) {
-    int lvid = vSelfMapG2L[edgeList[2*i]];
-    int rvid = vSelfMapG2L[edgeList[2*i+1]];
+  for (int i = 0; i < 2*numLocalEdges; i++) {
+    int vid = vSelfMapG2L[edgeList[i]];
     for (int j = 0; j < numVertPotentials; j++) {
-      vertexMuArr[lvid][j] += vertPotentials[lvid*numVertPotentials + j];
-      vertexMuArr[rvid][j] += vertPotentials[rvid*numVertPotentials + j];
+      vertMuArr[vid][j] += vertPotentials[vid*numVertPotentials + j];
     }
   }
-  return;
+  //DisplayMuArr();
   Communicate();
   UpdateMuArrAfterComm(); 
+  //DisplayMuArr();
   InitTree();
   //DisplayEdge();
-}
-
-void Grid::InitCommunication() {
-  //logFile << "k=" << edgeVal[0]->k << ", ksquare=" << edgeVal[0]->ksquare << std::endl;
-  aux = new APGMem(edgeVal[0]->k);
-  edgeOp = new EdgeOp(edgeVal[0]->k);
- 
-  logFile << "Init vertexMuArr\n";
-  vertexMuArr.resize(numLocalVerts);
-  for (int i = 0; i < numLocalVerts; i++) {
-    vertexMuArr[i] = new float[numVertPotentials];
-    memset(vertexMuArr[i], 0, sizeof(float) * numVertPotentials);
-  }
-  
-  int totalRequests = outNeighborMapEdge.size() * 2;
-  if (totalRequests == 0) {
-#if 0
-    logFile << "rank  " << rank << " has no neighbor!\n";
-#endif
-    return;
-  }
-  commBuffer = new float*[totalRequests];
-  for (int i = 0; i < neighbors.size(); i++) {
-    commBuffer[2*i] = new float[outNeighborMapEdge[i].size() * numVertPotentials];
-    commBuffer[2*i+1] = new float[outNeighborMapEdge[i].size() * numVertPotentials];
-  }
-  request = (MPI_Request *) malloc(sizeof(MPI_Request) * totalRequests);
 }
 
 void Grid::FinalizeCommunication() {
@@ -1672,27 +1598,60 @@ void Grid::CommunicateByRow() {
 #endif
 }
 
+void Grid::InitCommunication() {
+  //logFile << "k=" << edgeVal[0]->k << ", ksquare=" << edgeVal[0]->ksquare << std::endl;
+  aux = new APGMem(edgeVal[0]->k);
+  edgeOp = new EdgeOp(edgeVal[0]->k);
+ 
+  vertMuArr.resize(numLocalVerts);
+  for (int i = 0; i < numLocalVerts; i++) {
+    vertMuArr[i] = new float[numVertPotentials];
+  }
+  
+  int totalRequests = neighbors.size() * 2;
+  if (totalRequests == 0) {
+#ifdef DEBUG 
+    logFile << "rank  " << rank << " has no neighbor!\n";
+#endif
+    return;
+  }
+  int maxNvids = 0;
+  for (int i = 0; i < neighbors.size(); i++) {
+    if(maxNvids < outNeighborMapEdge[i].size()) {
+      maxNvids = outNeighborMapEdge[i].size();
+    }  
+  }
+  commBuffer = new float*[totalRequests];
+  for (int i = 0; i < totalRequests; i++) {
+    commBuffer[i] = new float[maxNvids * numVertPotentials];
+  }
+  
+  sendBuffer = commBuffer;
+  recvBuffer = commBuffer+neighbors.size();
+
+  request = (MPI_Request *) malloc(sizeof(MPI_Request) * totalRequests);
+}
+
 void Grid::CommunicateByEdge() {
+  // vertMuArr is the updated copy of node potential after compute  
   int requestIdx = 0;
   int cpySize = sizeof(float) * numVertPotentials;
   int numNeighbors = neighbors.size(); 
-  // vertexMuArr is the updated copy of node potential after compute  
+  
   for (int i = 0; i < numNeighbors; i++) {
-    int payloadSize = outNeighborMapEdge[i].size() * numVertPotentials;
     int nid = neighbors[i];
+    int payloadSize = outNeighborMapEdge[i].size() * numVertPotentials;
     for (int j = 0; j < outNeighborMapEdge[i].size(); j++) {
-      memcpy(commBuffer[i] + j * numVertPotentials,
-          vertexMuArr[vSelfMapG2L[outNeighborMapEdge[i][j]]], cpySize);
+      memcpy(sendBuffer[i] + j * numVertPotentials,
+          vertMuArr[vSelfMapG2L[outNeighborMapEdge[i][j]]], cpySize);
     }
-       
-    MPI_Isend(commBuffer[requestIdx], payloadSize, MPI_FLOAT, nid,
+    MPI_Isend(sendBuffer[i], payloadSize, MPI_FLOAT, nid,
         rank, MPI_COMM_WORLD, request + requestIdx);
     requestIdx++;
-    MPI_Irecv(commBuffer[requestIdx], payloadSize, MPI_FLOAT, nid, 
+    MPI_Irecv(recvBuffer[i], payloadSize, MPI_FLOAT, nid, 
         nid, MPI_COMM_WORLD, request + requestIdx);
     requestIdx++;
   }
-
   MPI_Status status;
   for (int i = 0; i < requestIdx; i++) {
     MPI_Wait(request + i, &status);

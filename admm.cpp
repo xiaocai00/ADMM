@@ -42,78 +42,81 @@ int main(int argc, char* argv[])
   //grid.SetGlobalInfo(10000, 1000, 3, 9);
   int irun = 0, totalRuns = 0;
   
-  double globalTime = 0; 
   double iterTime = 0;
   double startTime = 0;
   
   double allocTime;
   double loadTime;
-  double neighborTime;
+  double initTime;
   double optTime;
   
-  double commTime = 0;
-  double minCommTime = 0;
-  double maxCommTime = 0;
-  
   double compTime = 0;
-  double minCompTime = 0;
-  double maxCompTime = 0;
+  double commTime = 0;
+  double updateTime = 0;
    
-  PROFILE(startTime);
+  double maxCompTime = 0;
+  double maxCommTime = 0;
+  double maxUpdateTime = 0;
   
+  double minCompTime = 0;
+  double minCommTime = 0;
+  double minUpdateTime = 0;
+  
+  PROFILE(startTime);
   grid.SetGlobalInfo(fname);
-
   PROFILE(allocTime);
 
-  grid.LoadExample();
-  //grid.Load(fname);
-  //PROFILE(loadTime);
+  //grid.LoadExample();
+  grid.Load(fname);
+  PROFILE(loadTime);
 
   grid.InitOptimization();
-  MPI_Finalize();
-  return 0;
-  totalRuns = 1; 
+  totalRuns = 10;
+  PROFILE(initTime);
   // Optimization
   while(irun++ < totalRuns) {
     iterTime = MPI_Wtime();
     grid.Compute();
-#if 1
     compTime += MPI_Wtime() - iterTime;
+    
     iterTime = MPI_Wtime();
     grid.Communicate();
-    grid.Update();
     MPI_Barrier(MPI_COMM_WORLD);
     commTime += MPI_Wtime() - iterTime;
-    grid.DisplayEdge();
-#endif
+    //grid.DisplayEdge();
+    
+    iterTime = MPI_Wtime();
+    grid.Update();
+    updateTime += MPI_Wtime() - iterTime;
+    //grid.DisplayEdge();
   }
-  
   grid.FinalizeOptimization();
-  PROFILE(neighborTime);
- 
   PROFILE(optTime);
-  MPI_Barrier(MPI_COMM_WORLD);
-  double obj = grid.ComputeLinearObj();
-  double total_obj;
-  MPI_Reduce(&obj, &total_obj, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
+  
+  //double obj = grid.ComputeLinearObj();
+  //double total_obj;
+  //MPI_Reduce(&obj, &total_obj, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
   double runTime = MPI_Wtime() - startRun;
 
   MPI_GETMAX(commTime, maxCommTime);
   MPI_GETMIN(commTime, minCommTime);
   MPI_GETMAX(compTime, maxCompTime);
   MPI_GETMIN(compTime, minCompTime);
+  MPI_GETMAX(updateTime, maxCompTime);
+  MPI_GETMIN(updateTime, minCompTime);
 
   if (grid.GetRank()== 0) {
     fprintf(stderr, "processes:       %d\n", grid.GetNprocs());
-    fprintf(stderr, "globalTime:      %lf\n", globalTime);
     fprintf(stderr, "allocTime:       %lf\n", allocTime);
     fprintf(stderr, "loadTime:        %lf\n", loadTime);
-    fprintf(stderr, "neighborTime:    %lf\n", neighborTime);
+    fprintf(stderr, "initTime:        %lf\n", initTime);
     fprintf(stderr, "optTime:         %lf\n", optTime);
     fprintf(stderr, "maxCompTime:     %lf\n", maxCompTime);
-    fprintf(stderr, "minCompTime:     %lf\n", minCompTime);
     fprintf(stderr, "maxCommTime:     %lf\n", maxCommTime);
+    fprintf(stderr, "maxUpdateTime:   %lf\n", maxUpdateTime);
+    fprintf(stderr, "minCompTime:     %lf\n", minCompTime);
     fprintf(stderr, "minCommTime:     %lf\n", minCommTime);
+    fprintf(stderr, "minUpdateTime:   %lf\n", minUpdateTime);
     fprintf(stderr, "maxTotal:        %lf\n", runTime);
   }
 #endif

@@ -51,7 +51,7 @@ class Grid: public GraphBase {
     std::map<int, int> vSelfMapG2L;
     std::vector<std::pair<int, int> > offlenList;
     std::vector<int> vSelfVec;
-    std::vector<float*> vertexMuArr;
+    std::vector<float*> vertMuArr;
     std::vector<int> neighbors;
     // MPI Info
     int rank;
@@ -60,12 +60,16 @@ class Grid: public GraphBase {
     int vertexEnd;
     float penalty;
     float penaltyPrime;
-#if DEBUG
+#if DEBUG1
     std::ofstream logFile;
 #endif
     std::vector<Edge *> edgeVal;
     MPI_Request *request;
+
     float** commBuffer;
+
+    float** sendBuffer;
+    float** recvBuffer;
 
     int GetProcForGVertByRow(int gvid);
     void ResetVertexMuArr();
