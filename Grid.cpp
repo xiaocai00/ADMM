@@ -350,7 +350,6 @@ void Grid::Load(std::string fname) {
     PartitionByRow();
     LoadByRow(fname);
   } else if (part == EDGE) {
-    logFile << "load from " << fname << std::endl;
     PartitionByEdge(fname);
   } else {
     std::cerr << "only supported for the case: " << numGlobalCols << " = "
@@ -373,8 +372,8 @@ void Grid::PartitionByRow() {
   /*
    * prepare the partition boundary for each processor
    */
-  int boundingBoxPerProc[numProcs * BBOXSIZE];
-  int boundingBox[BBOXSIZE];
+ // int boundingBoxPerProc[numProcs * BBOXSIZE];
+  //int boundingBox[BBOXSIZE];
   int rowOffset = 0;
   int rowSize = numGlobalRows / numProcs;
   int extraRows = numGlobalRows % numProcs;
@@ -461,9 +460,12 @@ void Grid::PartitionByEdge(std::string fname) {
     edgeVal[i] = new Edge(numVertPotentials);
 
   int err, ncid, vid;
-
-  err = ncmpi_open(MPI_COMM_WORLD, fname.c_str(), NC_CLOBBER | NC_64BIT_DATA,
-      MPI_INFO_NULL, &ncid);
+  MPI_Info info;
+  MPI_Info_create(&info);
+  MPI_Info_set(info, "cb_buffer_size", "67108864");
+  MPI_Info_set(info, "cb_nodes", "80");
+  err = ncmpi_open(MPI_COMM_WORLD, fname.c_str(), 
+      NC_CLOBBER | NC_64BIT_DATA, info, &ncid);
   long long starts[NDIMS];
   long long counts[NDIMS];
   assert(NDIMS>1);
@@ -1415,6 +1417,7 @@ void Grid::FinalizeOptimization() {
 
 void Grid::DisplayEdge()
 {
+#ifdef DEBUG1
   std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
   //std::cout << etiosflags(ios::fixed) << setprecision(2);
   //std::cout.unsetf(std::ios::floatfield);
@@ -1465,6 +1468,7 @@ void Grid::DisplayEdge()
     }
     logFile << std::endl << std::endl;
   }
+#endif
 }
 
 void Grid::InitOptimization() {
@@ -1661,10 +1665,7 @@ void Grid::CommunicateByEdge() {
 double Grid::ComputeLinearObj()
 {
   double obj = 0.0;
-  int lvid, rvid;
   for (int i = 0; i < numLocalEdges; i++) {
-    lvid = vSelfMapG2L[edgeList[2*i]];
-    rvid = vSelfMapG2L[edgeList[2*i+1]];
     for (int j = 0; j < numVertPotentials * 2; j++) {
       obj += edgeVal[i]->x_potential_node[j] * edgeVal[i]->x_mu_node[j]; 
     }

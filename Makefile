@@ -1,7 +1,8 @@
 #CC=/Users/xiaocai/software/mpich-3.0.2/bin/mpic++
-CC=/Users/xiaocai/software/mpich-3.0.2/bin/mpic++ -g
+#CC=/Users/xiaocai/software/mpich-3.0.2/bin/mpic++ -g
 CC=mpic++
-CFLAGS=-DDEBUG1
+CC=CC
+#CFLAGS=-DDEBUG1
 #CFLAGS=-DDEBUG
 #CFLAGS=-std=c++11
 #INCDIR=-I/Users/xiaocai/software/mpich-3.0.2/include/ \

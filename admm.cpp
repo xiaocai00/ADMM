@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
   MPI_Init(&argc, &argv);
   MPI_Barrier(MPI_COMM_WORLD);
   double startRun = MPI_Wtime();
-  string fname("climate.nc");
+  string fname(argv[1]);
   Grid grid;
 #ifdef GENERATE
   if (grid.GetRank() == 0)
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
   grid.SetPartitioner(EDGE);
   //grid.SetGlobalInfo(10000, 1000, 3, 9);
   int irun = 0, totalRuns = 0;
-  
+  grid.SetPenalties(0.5, 1.0); 
   double iterTime = 0;
   double startTime = 0;
   
@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
   PROFILE(loadTime);
 
   grid.InitOptimization();
-  totalRuns = 10;
+  totalRuns = 500;
   PROFILE(initTime);
   // Optimization
   double obj, totalObj;
@@ -102,12 +102,12 @@ int main(int argc, char* argv[])
   PROFILE(optTime);
   
   double runTime = MPI_Wtime() - startRun;
-  MPI_GETMAX(commTime, maxCommTime);
-  MPI_GETMIN(commTime, minCommTime);
   MPI_GETMAX(compTime, maxCompTime);
   MPI_GETMIN(compTime, minCompTime);
-  MPI_GETMAX(updateTime, maxCompTime);
-  MPI_GETMIN(updateTime, minCompTime);
+  MPI_GETMAX(commTime, maxCommTime);
+  MPI_GETMIN(commTime, minCommTime);
+  MPI_GETMAX(updateTime, maxUpdateTime);
+  MPI_GETMIN(updateTime, minUpdateTime);
 
   if (grid.GetRank()== 0) {
     fprintf(stderr, "processes:       %d\n", grid.GetNprocs());
