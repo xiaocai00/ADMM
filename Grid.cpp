@@ -350,6 +350,7 @@ void Grid::Load(std::string fname) {
     PartitionByRow();
     LoadByRow(fname);
   } else if (part == EDGE) {
+    logFile << "load from " << fname << std::endl;
     PartitionByEdge(fname);
   } else {
     std::cerr << "only supported for the case: " << numGlobalCols << " = "

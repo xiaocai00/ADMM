@@ -98,12 +98,10 @@ int main(int argc, char* argv[])
       fprintf(stderr, "totalObj:       %lf\n", totalObj);
     }
   }
-  
   grid.FinalizeOptimization();
   PROFILE(optTime);
   
   double runTime = MPI_Wtime() - startRun;
-
   MPI_GETMAX(commTime, maxCommTime);
   MPI_GETMIN(commTime, minCommTime);
   MPI_GETMAX(compTime, maxCompTime);
