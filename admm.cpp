@@ -74,6 +74,7 @@ int main(int argc, char* argv[])
   totalRuns = 10;
   PROFILE(initTime);
   // Optimization
+  double obj, totalObj;
   while(irun++ < totalRuns) {
     iterTime = MPI_Wtime();
     grid.Compute();
@@ -89,13 +90,18 @@ int main(int argc, char* argv[])
     grid.Update();
     updateTime += MPI_Wtime() - iterTime;
     //grid.DisplayEdge();
+    
+    obj = grid.ComputeLinearObj();
+    MPI_Reduce(&obj, &totalObj, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    
+    if (grid.GetRank() == 0) {
+      fprintf(stderr, "totalObj:       %lf\n", totalObj);
+    }
   }
+  
   grid.FinalizeOptimization();
   PROFILE(optTime);
   
-  //double obj = grid.ComputeLinearObj();
-  //double total_obj;
-  //MPI_Reduce(&obj, &total_obj, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
   double runTime = MPI_Wtime() - startRun;
 
   MPI_GETMAX(commTime, maxCommTime);

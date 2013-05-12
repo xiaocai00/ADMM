@@ -350,7 +350,6 @@ void Grid::Load(std::string fname) {
     PartitionByRow();
     LoadByRow(fname);
   } else if (part == EDGE) {
-    logFile << "load from " << fname << std::endl;
     PartitionByEdge(fname);
   } else {
     std::cerr << "only supported for the case: " << numGlobalCols << " = "
@@ -1672,8 +1671,12 @@ double Grid::ComputeLinearObj()
       obj += edgeVal[i]->x_potential_edge[j] * edgeVal[i]->x_mu_edge[j]; 
     }
   }
+#ifdef DEBUG1
+  logFile<< "obj:" << obj << "\n";
+#endif
   return obj*rhoEdge;
 }
+
 /**
  * exchange the boundary vertcies' potentials
  * in order to get convergence.
